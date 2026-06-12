@@ -213,6 +213,41 @@ html, body {
   color: var(--text-dim);
 }
 
+/* Scroll Hint */
+.scroll-hint {
+  position: absolute;
+  bottom: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 20;
+  pointer-events: none;
+  color: var(--text-dim);
+}
+
+.scroll-label {
+  font-family: var(--font-press-start), monospace;
+  font-size: 0.45rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+.scroll-arrow {
+  width: 20px;
+  height: 20px;
+  animation: scroll-bounce 1.8s ease-in-out infinite;
+  image-rendering: pixelated;
+}
+
+@keyframes scroll-bounce {
+  0%, 100% { transform: translateY(0); opacity: 0.4; }
+  50%       { transform: translateY(6px); opacity: 1; }
+}
+
 /* Responsive Scaling */
 @media (max-width: 1024px) {
   .screen {

@@ -341,8 +341,8 @@ export default function Home() {
             textShadow: `0 0 ${2 + brightness * 6}px rgb(${r}, ${g}, ${b})`,
 
             char: displayChar,
-            tick: Math.floor(Math.random() * 6),
-            interval: 2 + Math.floor(Math.random() * 4),
+            tick: Math.floor(Math.random() * 60),
+            interval: 60 + Math.floor(Math.random() * 60),
             offsetX: 0,
             offsetY: 0,
             isReturning: false,
@@ -518,7 +518,8 @@ export default function Home() {
               cell.history.some((h) => h.x !== 0 || h.y !== 0);
 
             // Scramble ultra-fast (every 1 frame) during hover/repulsion or landing, otherwise scramble fast (every 2-6 frames)
-            const currentInterval = (isMoving || dist < 150) ? 1 : cell.interval;
+            // Vignette cells use their own slow interval to avoid flickering the gradient
+            const currentInterval = cell.isVignette ? cell.interval : (isMoving || dist < 150) ? 1 : cell.interval;
 
             if (cell.tick >= currentInterval) {
               cell.tick = 0;
@@ -859,6 +860,20 @@ export default function Home() {
           <canvas ref={canvasRef} id="grid"></canvas>
         </main>
 
+
+        <div className="scroll-hint">
+          <span className="scroll-label">scorri</span>
+          <svg className="scroll-arrow" viewBox="0 0 18 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+            {/* stem */}
+            <rect x="8" y="0" width="2" height="10"/>
+            {/* arrowhead — wide row */}
+            <rect x="4" y="10" width="10" height="2"/>
+            {/* arrowhead — mid row */}
+            <rect x="6" y="12" width="6" height="2"/>
+            {/* arrowhead — tip */}
+            <rect x="8" y="14" width="2" height="2"/>
+          </svg>
+        </div>
 
       </div>
     </>
