@@ -494,21 +494,12 @@ export default function Home() {
           const red = data[idx];
           const green = data[idx + 1];
           const blue = data[idx + 2];
-          
+
           const brightness = (red * 0.299 + green * 0.587 + blue * 0.114) / 255;
 
-          if (brightness > 0.05) {
-            let displayChar = " ";
-            if (brightness < 0.3) {
-              const charPool = ".:+";
-              displayChar = charPool[Math.floor(Math.random() * charPool.length)];
-            } else if (brightness < 0.6) {
-              const charPool = "I|!1";
-              displayChar = charPool[Math.floor(Math.random() * charPool.length)];
-            } else {
-              const charPool = "[]{}#";
-              displayChar = charPool[Math.floor(Math.random() * charPool.length)];
-            }
+          if (brightness > 0.52) {
+            const charPool = "0123456789012345678901234567890123456789#@";
+            const displayChar = charPool[Math.floor(Math.random() * charPool.length)];
 
             heroCells.push({
               col: c,
@@ -583,7 +574,7 @@ export default function Home() {
 
       if (showHero) {
         // DISEGNA IL TESTO (heroCells)
-        ctx.font = `500 ${CELL_SIZE * 1.35}px "Clash Grotesk", sans-serif`;
+        ctx.font = `500 ${CELL_SIZE * 1.25}px "Clash Grotesk", sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
@@ -619,11 +610,11 @@ export default function Home() {
           const isYellow = cell.color === "rgb(231, 217, 58)";
           ctx.fillStyle = cell.color || "#ffffff";
           if (isYellow) {
-            ctx.shadowColor = "rgba(231, 217, 58, 0.95)";
-            ctx.shadowBlur = 15;
+            ctx.shadowColor = "rgba(231, 217, 58, 0.85)";
+            ctx.shadowBlur = 0;
           } else {
-            ctx.shadowColor = "rgba(255, 255, 255, 0.95)";
-            ctx.shadowBlur = 10;
+            ctx.shadowColor = "rgba(255, 255, 255, 0.85)";
+            ctx.shadowBlur = 2;
           }
           ctx.fillText(char, drawX, drawY);
           ctx.shadowBlur = 0;
@@ -1310,13 +1301,13 @@ export default function Home() {
           <span className="scroll-label">scorri</span>
           <svg className="scroll-arrow" viewBox="0 0 18 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
             {/* stem */}
-            <rect x="8" y="0" width="2" height="10"/>
+            <rect x="8" y="0" width="2" height="10" />
             {/* arrowhead — wide row */}
-            <rect x="4" y="10" width="10" height="2"/>
+            <rect x="4" y="10" width="10" height="2" />
             {/* arrowhead — mid row */}
-            <rect x="6" y="12" width="6" height="2"/>
+            <rect x="6" y="12" width="6" height="2" />
             {/* arrowhead — tip */}
-            <rect x="8" y="14" width="2" height="2"/>
+            <rect x="8" y="14" width="2" height="2" />
           </svg>
         </div>
 
