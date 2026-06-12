@@ -38,11 +38,12 @@ export default function Home() {
     const gridCacheCanvas = document.createElement("canvas");
     const mouse = { x: null, y: null, active: false };
 
-    // Glitch State
+    // Glitch State (Time-based in milliseconds)
     let glitchActive = false;
-    let glitchTimer = 0;
-    let nextGlitchTime = 120 + Math.random() * 120; // 2-4 secondi (120-240 frame)
-    let glitchDuration = 0;
+    let lastGlitchTime = Date.now();
+    let nextGlitchDelay = 2000 + Math.random() * 4000; // 2-6 secondi di pausa (2000-6000ms)
+    let glitchStartTime = 0;
+    let glitchDurationMs = 530; // 32 frame a 60fps = ~530ms
 
     // 1. Setup dimensions and scale
     function setupCanvas() {
@@ -525,33 +526,33 @@ export default function Home() {
     function animate() {
       if (typeof window === "undefined") return;
 
-      // Gestione timer del glitch
-      glitchTimer++;
+      // Gestione timer del glitch (Time-based in milliseconds)
+      const now = Date.now();
       if (!glitchActive) {
-        if (glitchTimer >= nextGlitchTime) {
+        if (now - lastGlitchTime >= nextGlitchDelay) {
           glitchActive = true;
-          glitchTimer = 0;
-          glitchDuration = 32; // 32 frame in totale (circa 530ms)
-          const isYellow = Math.random() < 0.5;
-          const targetColor = isYellow ? "rgb(231, 217, 58)" : "rgb(255, 255, 255)";
+          glitchStartTime = now;
+          glitchDurationMs = 530; // 32 frame in totale (circa 530ms)
+          const targetColor = "rgb(231, 217, 58)";
           heroCells.forEach((cell) => {
             cell.color = targetColor;
           });
-          console.log(`Automatic glitch triggered! nextGlitchTime was: ${nextGlitchTime}, Color: ${isYellow ? "yellow" : "white"}`);
+          console.log(`Automatic glitch triggered! nextGlitchDelay was: ${nextGlitchDelay}ms`);
         }
       } else {
-        if (glitchTimer >= glitchDuration) {
+        if (now - glitchStartTime >= glitchDurationMs) {
           glitchActive = false;
-          glitchTimer = 0;
-          nextGlitchTime = 120 + Math.random() * 120; // 2-4 secondi di pausa (120-240 frame)
-          console.log("Glitch ended, next automatic glitch in frames:", nextGlitchTime);
+          lastGlitchTime = now;
+          nextGlitchDelay = 2000 + Math.random() * 4000; // 2-6 secondi di pausa (2000-6000ms)
+          console.log(`Glitch ended, next automatic glitch in: ${nextGlitchDelay}ms`);
         }
       }
 
       // Generazione degli spostamenti orizzontali casuali (glitch line shift)
       const glitchRowShifts = [];
       if (glitchActive) {
-        const isTransition = glitchTimer < 10 || glitchTimer >= glitchDuration - 10;
+        const elapsed = now - glitchStartTime;
+        const isTransition = elapsed < 165 || elapsed >= glitchDurationMs - 165; // ~10 frame su 60fps = 165ms
         const shiftCount = isTransition ? (Math.floor(Math.random() * 4) + 2) : (Math.random() < 0.2 ? 1 : 0);
         const maxShift = isTransition ? 60 : 6;
 
@@ -570,11 +571,12 @@ export default function Home() {
       // Con una transizione iniziale e finale instabile, e un corpo centrale stabile di 200ms (12 frame)
       let showHero = false;
       if (glitchActive) {
-        if (glitchTimer < 10 || glitchTimer >= glitchDuration - 10) {
-          // Fase iniziale (intro) e finale (outro) di 10 frame (~160ms): forte sfarfallio
+        const elapsed = now - glitchStartTime;
+        if (elapsed < 165 || elapsed >= glitchDurationMs - 165) {
+          // Fase iniziale (intro) e finale (outro) di 165ms: forte sfarfallio
           showHero = Math.random() < 0.6;
         } else {
-          // Corpo centrale: visualizzazione stabile della scritta (12 frame, ~200ms)
+          // Corpo centrale: visualizzazione stabile della scritta (200ms)
           showHero = true;
         }
       }
@@ -1188,8 +1190,8 @@ export default function Home() {
       const key = e.key.toLowerCase();
       if (key === "g" || key === "d") {
         glitchActive = true;
-        glitchTimer = 0;
-        glitchDuration = 32; // 32 frame in totale (circa 530ms)
+        glitchStartTime = Date.now();
+        glitchDurationMs = 530; // ~530ms
         const targetColor = key === "g" ? "rgb(231, 217, 58)" : "rgb(255, 255, 255)";
         heroCells.forEach((cell) => {
           cell.color = targetColor;
