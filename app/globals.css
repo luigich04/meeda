@@ -1,0 +1,253 @@
+/* Core Design System & Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg-color: #0c0902;
+  --text-color: #f3f0eb;
+  --text-dim: #a5a5a5; /* Slightly adjusted for a natural retro contrast */
+  --font-mono: var(--font-space-mono), 'Courier New', monospace;
+  --font-logo: var(--font-share-tech-mono), var(--font-space-mono), monospace;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+}
+
+/* Hidden Source Image for Layout & Bounding Rect */
+#source {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  max-width: 980px;
+  height: auto;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -100;
+}
+
+@media (max-width: 768px) {
+  #source {
+    width: 95%;
+  }
+}
+
+/* Canvas Grid covering the entire viewport */
+#grid {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* CRT Screen Effects */
+.crt-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle, rgba(0, 0, 0, 0) 60%, rgba(0, 0, 0, 0.5) 100%);
+  pointer-events: none;
+  z-index: 99;
+}
+
+.crt-scanlines {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%, 
+    rgba(0, 0, 0, 0.22) 50%
+  );
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 98;
+}
+
+.crt-flicker {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(18, 16, 16, 0.015);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 97;
+  animation: crt-flicker-anim 0.15s infinite;
+}
+
+@keyframes crt-flicker-anim {
+  0% { opacity: 0.15; }
+  50% { opacity: 0.12; }
+  100% { opacity: 0.15; }
+}
+
+/* Base Layout Container */
+.screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* Header Styles */
+.site-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+}
+
+.logo a {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.logo-image {
+  height: 22px;
+  width: auto;
+  display: block;
+  transition: opacity 0.3s;
+}
+
+.logo a:hover {
+  opacity: 0.7;
+}
+
+.nav-center {
+  display: flex;
+  gap: 40px;
+}
+
+.header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+/* Custom Interactive Links */
+.nav-link {
+  color: var(--text-color);
+  text-decoration: none;
+  font-size: 0.95rem;
+  position: relative;
+  padding-bottom: 2px;
+  transition: color 0.3s;
+}
+
+.nav-link::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: 1px;
+  background-color: var(--text-color);
+  transition: width 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.nav-link:hover::after {
+  width: 100%;
+}
+
+.nav-link:hover {
+  color: #f3f0eb;
+}
+
+/* Canvas Container spacing */
+.canvas-container {
+  flex-grow: 1;
+  width: 100%;
+  pointer-events: none;
+}
+
+/* Footer Styles */
+.site-footer {
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  width: 100%;
+  z-index: 20;
+  pointer-events: auto;
+}
+
+.footer-right {
+  max-width: 450px;
+  text-align: right;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+/* Responsive Scaling */
+@media (max-width: 1024px) {
+  .screen {
+    padding: 24px;
+  }
+  
+  .nav-center {
+    gap: 20px;
+  }
+}
+
+@media (max-width: 768px) {
+  .site-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .nav-center {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  
+  .header-right {
+    align-items: flex-start;
+    width: 100%;
+  }
+  
+  .site-footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  
+  .footer-right {
+    text-align: left;
+    max-width: 100%;
+  }
+}
