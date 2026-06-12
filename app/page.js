@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 
 export default function Home() {
   const canvasRef = useRef(null);
   const logoRef = useRef(null);
 
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const logoImg = logoRef.current;
+
     if (!canvas || !logoImg) return;
 
     const ctx = canvas.getContext("2d", { alpha: true });
@@ -29,11 +31,18 @@ export default function Home() {
     // State
     let cols, rows;
     let cells = [];
+    let heroCells = [];
     let streams = [];
     let ambientParticles = [];
     let animationFrameId;
     const gridCacheCanvas = document.createElement("canvas");
     const mouse = { x: null, y: null, active: false };
+
+    // Glitch State
+    let glitchActive = false;
+    let glitchTimer = 0;
+    let nextGlitchTime = 120 + Math.random() * 120; // 2-4 secondi (120-240 frame)
+    let glitchDuration = 0;
 
     // 1. Setup dimensions and scale
     function setupCanvas() {
@@ -214,6 +223,7 @@ export default function Home() {
         }
       }
 
+      /*
       // 2. "Inverse circle" vignette: two blobs at bottom-left + top-right.
       // Each blob = smooth union of the two adjacent screen edges (left+bottom, right+top).
       // This creates a CONCAVE inner boundary (hyperbola arc), the inverse of a convex circle.
@@ -350,368 +360,836 @@ export default function Home() {
           });
         }
       }
+      */
+
+      // 2. Round radial vignette all around the screen with project's blue fading to center
+      const centerX = cols / 2;
+      const centerY = rows / 2;
+      const startDist = 0.25; // Vignette starts appearing at 25% distance from center
+      const maxOpacity = 0.72; // Max opacity at extreme edges
+
+      const vr = 81, vg = 95, vb = 254; // Project's blue: rgb(81, 95, 254)
+
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          if (occupied.has(`${col},${row}`)) continue;
+
+          // Normalized coordinates relative to center (-1 to 1)
+          const dx = (col - centerX) / (cols / 2);
+          const dy = (row - centerY) / (rows / 2);
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < startDist) continue;
+
+          // Compute intensity normalized between startDist and maximum distance (~1.414 at corners)
+          const intensity = Math.min(1, (dist - startDist) / (1.414 - startDist));
+          if (intensity < 0.01) continue;
+
+          // Cubic ramp for organic and soft fade toward the center
+          const baseOpacity = Math.pow(intensity, 1.3) * maxOpacity;
+          if (baseOpacity < 0.005) continue;
+
+          // Dithered ASCII character selection based on distance/intensity with randomized noise
+          const vignetteChars = " .:-=+*#%@";
+          const jitter = (Math.random() - 0.5) * 2.2;
+          let charIndex = Math.floor(intensity * (vignetteChars.length - 1) + jitter);
+          charIndex = Math.max(0, Math.min(vignetteChars.length - 1, charIndex));
+          const displayChar = vignetteChars[charIndex];
+
+          if (displayChar === " ") continue;
+
+          cells.push({
+            col,
+            row,
+            isLit: true,
+            isParticle: false,
+            isVignette: true,
+
+            vignetteOpacity: baseOpacity,
+            vignetteColor: `rgb(${vr}, ${vg}, ${vb})`,
+            brightness: intensity,
+
+            color: `rgb(${vr}, ${vg}, ${vb})`,
+            opacity: baseOpacity,
+            textShadow: `0 0 ${2 + intensity * 6}px rgb(${vr}, ${vg}, ${vb})`,
+
+            char: displayChar,
+            tick: Math.floor(Math.random() * 60),
+            interval: 60 + Math.floor(Math.random() * 60),
+            offsetX: 0,
+            offsetY: 0,
+            isReturning: false,
+            history: [],
+          });
+        }
+      }
     }
 
-    // 3. GSAP Animation Loop (Rendering only)
-    function animate() {
+    // Campionamento testo "Where brands turn gold." in ASCII
+    function sampleTextIntoCells() {
       if (typeof window === "undefined") return;
-      drawGrid();
 
-      const len = cells.length;
+      const sampleCanvas = document.createElement("canvas");
+      sampleCanvas.width = cols;
+      sampleCanvas.height = rows;
+      const sampleCtx = sampleCanvas.getContext("2d");
 
-      // Update offsets first for all cells
-      for (let i = 0; i < len; i++) {
-        const cell = cells[i];
+      sampleCtx.fillStyle = "#000000";
+      sampleCtx.fillRect(0, 0, cols, rows);
 
-        // Hover history
-        if (!cell.history) cell.history = [];
-        cell.history.push({ x: cell.offsetX, y: cell.offsetY });
-        if (cell.history.length > 5) {
-          cell.history.shift();
-        }
+      const isMobile = window.innerWidth < 768;
+
+      if (isMobile) {
+        // Linea 1: "Where brands"
+        // Linea 2: "turn gold."
+        let fontSize = 10;
+        sampleCtx.font = `bold ${fontSize}px "Courier New", Courier, monospace`;
+        let textWidth = sampleCtx.measureText("Where brands").width;
+        fontSize = Math.floor((cols * 0.88) / textWidth * fontSize);
+        fontSize = Math.min(fontSize, Math.floor(rows * 0.20));
+        fontSize = Math.max(fontSize, 6);
+
+        sampleCtx.font = `bold ${fontSize}px "Courier New", Courier, monospace`;
+        sampleCtx.textAlign = "center";
+        sampleCtx.textBaseline = "middle";
+
+        const centerY = rows / 2;
+        const lineSpacing = fontSize * 1.25;
+
+        // Scrivi Linea 1 in blu neon (#515ffe)
+        sampleCtx.fillStyle = "#515ffe";
+        sampleCtx.fillText("Where brands", cols / 2, centerY - lineSpacing / 2);
+
+        // Scrivi Linea 2 (turn in blu e gold. in giallo)
+        const turnText = "turn ";
+        const goldText = "gold.";
+        const totalText = "turn gold.";
+        const totalWidth = sampleCtx.measureText(totalText).width;
+        const startX = (cols - totalWidth) / 2;
+
+        sampleCtx.textAlign = "left";
+        sampleCtx.fillStyle = "#515ffe";
+        sampleCtx.fillText(turnText, startX, centerY + lineSpacing / 2);
+
+        const turnWidth = sampleCtx.measureText(turnText).width;
+        sampleCtx.fillStyle = "#e7d93a";
+        sampleCtx.fillText(goldText, startX + turnWidth, centerY + lineSpacing / 2);
+      } else {
+        // Riga singola: "Where brands turn gold."
+        let fontSize = 10;
+        sampleCtx.font = `bold ${fontSize}px "Courier New", Courier, monospace`;
+        let textWidth = sampleCtx.measureText("Where brands turn gold.").width;
+        fontSize = Math.floor((cols * 0.86) / textWidth * fontSize);
+        fontSize = Math.min(fontSize, Math.floor(rows * 0.30));
+        fontSize = Math.max(fontSize, 7);
+
+        sampleCtx.font = `bold ${fontSize}px "Courier New", Courier, monospace`;
+        sampleCtx.textAlign = "left";
+        sampleCtx.textBaseline = "middle";
+
+        const firstPart = "Where brands turn ";
+        const secondPart = "gold.";
+        const totalWidth = sampleCtx.measureText(firstPart + secondPart).width;
+        const startX = (cols - totalWidth) / 2;
+        const centerY = rows / 2;
+
+        sampleCtx.fillStyle = "#515ffe";
+        sampleCtx.fillText(firstPart, startX, centerY);
+
+        const firstWidth = sampleCtx.measureText(firstPart).width;
+        sampleCtx.fillStyle = "#e7d93a";
+        sampleCtx.fillText(secondPart, startX + firstWidth, centerY);
       }
 
-      // Draw and update background ambient particles
-      ctx.font = `bold ${CELL_SIZE * 1.0}px "Courier New", Courier, monospace`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
+      const imgData = sampleCtx.getImageData(0, 0, cols, rows);
+      const { data } = imgData;
 
-      const pushRadius = PUSH_RADIUS * CELL_STEP;
+      heroCells = [];
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const idx = (r * cols + c) * 4;
+          const red = data[idx];
+          const green = data[idx + 1];
+          const blue = data[idx + 2];
+          
+          const brightness = (red * 0.299 + green * 0.587 + blue * 0.114) / 255;
 
-      for (let i = 0; i < ambientParticles.length; i++) {
-        const p = ambientParticles[i];
+          if (brightness > 0.05) {
+            const isGold = red > 150 && green > 150 && blue < 100;
 
-        // Snapped coordinates for grid rendering
-        const col = Math.round(p.x / CELL_STEP);
-        const row = Math.round(p.y / CELL_STEP);
-        const cellY = row * CELL_STEP + CELL_SIZE / 2;
-        const cellX = col * CELL_STEP + CELL_SIZE / 2;
-
-        // Reveal logic linked to Matrix rain sweep
-        const stream = streams[col];
-        const isRevealed = stream && (stream.y >= cellY);
-
-        if (isRevealed) {
-          // Physics push from mouse
-          if (mouse.active && mouse.x !== null && mouse.y !== null) {
-            const dx = p.x - mouse.x;
-            const dy = p.y - mouse.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-
-            if (dist < pushRadius && dist > 0.1) {
-              const force = (pushRadius - dist) / pushRadius;
-              p.vx += (dx / dist) * force * 1.5;
-              p.vy += (dy / dist) * force * 1.5;
-            }
-          }
-
-          // Apply physics updates
-          p.x += p.vx;
-          p.y += p.vy;
-
-          // Apply friction/drag to slow down mouse repulsion
-          p.vx *= 0.94;
-          p.vy *= 0.94;
-
-          // Maintain gentle drift speed
-          const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-          if (speed < 0.2) {
-            p.vx += p.dx * 0.05;
-            p.vy += p.dy * 0.05;
-          }
-
-          // Screen wrapping
-          if (p.x < 0) p.x = window.innerWidth;
-          if (p.x > window.innerWidth) p.x = 0;
-          if (p.y < 0) p.y = window.innerHeight;
-          if (p.y > window.innerHeight) p.y = 0;
-
-          // Rendering
-          ctx.fillStyle = p.color;
-          ctx.fillText(p.char, cellX, cellY);
-        }
-      }
-
-      // PASS 1: Draw Matrix Rain streams across the entire screen (bold, 1.2x size)
-      ctx.font = `bold ${CELL_SIZE * 1.2}px "Courier New", Courier, monospace`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      const rainPool = ".:+*#%@0369";
-      for (let c = 0; c < cols; c++) {
-        const stream = streams[c];
-        if (!stream) continue;
-
-        const headRow = Math.floor(stream.y / CELL_STEP);
-        if (headRow < -15) continue; // Not visible yet
-
-        const trailLength = 15;
-        for (let r = headRow - trailLength; r <= headRow; r++) {
-          if (r < 0 || r >= rows) continue;
-
-          const drawX = c * CELL_STEP + CELL_SIZE / 2;
-          const drawY = r * CELL_STEP + CELL_SIZE / 2;
-
-          // Rapidly flickering character for the matrix code look
-          const charIdx = Math.floor((c * 31 + r * 17 + Date.now() / 80) % rainPool.length);
-          const displayChar = rainPool[charIdx];
-
-          const age = headRow - r;
-          if (age === 0) {
-            // Head: glowing bright white
-            ctx.fillStyle = "rgba(243, 240, 235, 0.95)";
-          } else {
-            // Tail: fading neon blue
-            const opacity = Math.max(0, 1 - age / trailLength) * 0.8;
-            ctx.fillStyle = `rgba(81, 95, 254, ${opacity})`;
-          }
-
-          ctx.fillText(displayChar, drawX, drawY);
-        }
-      }
-
-      // PASS 2: Draw Large Logo Characters (revealed as rain passes, bold, 1.2x size)
-      ctx.font = `bold ${CELL_SIZE * 1.2}px "Courier New", Courier, monospace`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      for (let i = 0; i < len; i++) {
-        const cell = cells[i];
-        if (cell.isLit && !cell.isParticle) {
-          const cellY = cell.row * CELL_STEP + CELL_SIZE / 2;
-
-          // Check if the rain sweep has reached this cell's row
-          const stream = streams[cell.col];
-          const isRevealed = stream && (stream.y >= cellY);
-
-          if (isRevealed) {
-            // Interpolate color from glowing white/blue to target color as the head recedes
-            const dist = stream.y - cellY;
-            let color;
-            if (cell.isVignette) {
-              color = `rgba(81, 95, 254, ${cell.vignetteOpacity})`;
-              if (dist < 150) {
-                const t = dist / 150; // 0 to 1
-                const r = Math.round(255 + (0 - 255) * t);
-                const g = Math.round(255 + (85 - 255) * t);
-                const b = Math.round(255 + (255 - 255) * t);
-                const a = 1.0 + (cell.vignetteOpacity - 1.0) * t;
-                color = `rgba(${r}, ${g}, ${b}, ${a})`;
+            let displayChar = " ";
+            if (isGold) {
+              if (brightness < 0.25) {
+                const goldPool = ".:|";
+                displayChar = goldPool[Math.floor(Math.random() * goldPool.length)];
+              } else if (brightness < 0.55) {
+                const goldPool = "I1T|";
+                displayChar = goldPool[Math.floor(Math.random() * goldPool.length)];
+              } else {
+                const goldPool = "HM#[]";
+                displayChar = goldPool[Math.floor(Math.random() * goldPool.length)];
               }
             } else {
-              color = CHAR_COLOR;
-              if (dist < 150) {
-                const t = dist / 150; // 0 to 1
-                const r = Math.round(255 + (218 - 255) * t);
-                const g = Math.round(255 + (255 - 255) * t);
-                const b = Math.round(255 + (0 - 255) * t);
-                color = `rgb(${r}, ${g}, ${b})`;
-              }
-            }
-
-            // Increment frame counter
-            cell.tick++;
-
-            const isMoving =
-              cell.offsetX !== 0 ||
-              cell.offsetY !== 0 ||
-              cell.history.some((h) => h.x !== 0 || h.y !== 0);
-
-            // Scramble ultra-fast (every 1 frame) during hover/repulsion or landing, otherwise scramble fast (every 2-6 frames)
-            // Vignette cells use their own slow interval to avoid flickering the gradient
-            const currentInterval = cell.isVignette ? cell.interval : (isMoving || dist < 150) ? 1 : cell.interval;
-
-            if (cell.tick >= currentInterval) {
-              cell.tick = 0;
-              if (cell.brightness < 0.4) {
-                const lightPool = ".:+";
-                cell.char = lightPool[Math.floor(Math.random() * lightPool.length)];
-              } else if (cell.brightness < 0.75) {
-                const medPool = "*#%";
-                cell.char = medPool[Math.floor(Math.random() * medPool.length)];
+              if (brightness < 0.3) {
+                const techPool = ".:+";
+                displayChar = techPool[Math.floor(Math.random() * techPool.length)];
+              } else if (brightness < 0.6) {
+                const techPool = "I|!1";
+                displayChar = techPool[Math.floor(Math.random() * techPool.length)];
               } else {
-                const darkPool = "@0369";
-                cell.char = darkPool[Math.floor(Math.random() * darkPool.length)];
+                const techPool = "[]{}#";
+                displayChar = techPool[Math.floor(Math.random() * techPool.length)];
               }
             }
 
-            const displayChar = cell.char;
-
-            // Draw hover trail
-            if (isMoving) {
-              const histLen = cell.history.length;
-              for (let h = 0; h < histLen - 1; h++) {
-                const pos = cell.history[h];
-                if (pos.x === 0 && pos.y === 0) continue;
-                const opacity = ((h + 1) / histLen) * 0.35 * (cell.isVignette ? cell.vignetteOpacity * 2 : 1.0);
-                ctx.fillStyle = `rgba(81, 95, 254, ${opacity})`;
-                const drawX = cell.col * CELL_STEP + CELL_SIZE / 2 + pos.x;
-                const drawY = cellY + pos.y;
-                ctx.fillText(displayChar, drawX, drawY);
-              }
+            let rCol, gCol, bCol;
+            if (isGold) {
+              rCol = 231;
+              gCol = 217;
+              bCol = 58;
+            } else {
+              rCol = 81;
+              gCol = 95;
+              bCol = 254;
             }
 
-            // Draw current logo character
-            ctx.fillStyle = color;
-            const drawX = cell.col * CELL_STEP + CELL_SIZE / 2 + cell.offsetX;
-            const drawY = cellY + cell.offsetY;
-            ctx.fillText(displayChar, drawX, drawY);
-          }
-        }
-      }
-
-      // PASS 3: Draw Small Logo Particles (revealed as rain passes, bold, 0.9x size)
-      ctx.font = `bold ${CELL_SIZE * 0.9}px "Courier New", Courier, monospace`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-
-      for (let i = 0; i < len; i++) {
-        const cell = cells[i];
-        if (cell.isLit && cell.isParticle) {
-          const cellY = cell.row * CELL_STEP + CELL_SIZE / 2;
-
-          const stream = streams[cell.col];
-          const isRevealed = stream && (stream.y >= cellY);
-
-          if (isRevealed) {
-            // Glow interpolation for particle reveal
-            const dist = stream.y - cellY;
-            let color = "rgba(81, 95, 254, 0.75)";
-            if (dist < 150) {
-              const t = dist / 150;
-              const r = Math.round(255 + (0 - 255) * t);
-              const g = Math.round(255 + (85 - 255) * t);
-              const b = Math.round(255 + (255 - 255) * t);
-              const a = 1.0 + (0.75 - 1.0) * t;
-              color = `rgba(${r}, ${g}, ${b}, ${a})`;
-            }
-
-            // Increment frame counter
-            cell.tick++;
-
-            const isMoving =
-              cell.offsetX !== 0 ||
-              cell.offsetY !== 0 ||
-              cell.history.some((h) => h.x !== 0 || h.y !== 0);
-
-            // Scramble ultra-fast (every 1 frame) during hover/repulsion or landing, otherwise scramble fast (every 2-6 frames)
-            const currentInterval = (isMoving || dist < 150) ? 1 : cell.interval;
-
-            if (cell.tick >= currentInterval) {
-              cell.tick = 0;
-              if (cell.brightness < 0.4) {
-                const lightPool = ".:+";
-                cell.char = lightPool[Math.floor(Math.random() * lightPool.length)];
-              } else if (cell.brightness < 0.75) {
-                const medPool = "*#%";
-                cell.char = medPool[Math.floor(Math.random() * medPool.length)];
-              } else {
-                const darkPool = "@0369";
-                cell.char = darkPool[Math.floor(Math.random() * darkPool.length)];
-              }
-            }
-
-            const displayChar = cell.char;
-
-            // Draw hover trail
-            if (isMoving) {
-              const histLen = cell.history.length;
-              for (let h = 0; h < histLen - 1; h++) {
-                const pos = cell.history[h];
-                if (pos.x === 0 && pos.y === 0) continue;
-                const opacity = ((h + 1) / histLen) * 0.35;
-                ctx.fillStyle = `rgba(81, 95, 254, ${opacity * 0.7})`;
-                const drawX = cell.col * CELL_STEP + CELL_SIZE / 2 + pos.x;
-                const drawY = cellY + pos.y;
-                ctx.fillText(displayChar, drawX, drawY);
-              }
-            }
-
-            // Draw current particle character
-            ctx.fillStyle = color;
-            const drawX = cell.col * CELL_STEP + CELL_SIZE / 2 + cell.offsetX;
-            const drawY = cellY + cell.offsetY;
-            ctx.fillText(displayChar, drawX, drawY);
-          }
-        }
-      }
-
-      // Dynamic ambient glitches in background
-      const numGlitches = Math.floor(cols * rows * 0.0003);
-      ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
-      const noisePool = ".:+*#%@0369";
-
-      for (let g = 0; g < numGlitches; g++) {
-        const col = Math.floor(Math.random() * cols);
-        const row = Math.floor(Math.random() * rows);
-        const displayChar = noisePool[Math.floor(Math.random() * noisePool.length)];
-
-        const drawX = col * CELL_STEP + CELL_SIZE / 2;
-        const drawY = row * CELL_STEP + CELL_SIZE / 2;
-        ctx.fillText(displayChar, drawX, drawY);
-      }
-
-      animationFrameId = requestAnimationFrame(animate);
-    }
-
-    // 4. Update GSAP Tweens on Mousemove
-    function updateTweens() {
-      if (!mouse.active || mouse.x === null || mouse.y === null) return;
-
-      const mouseRadiusPx = PUSH_RADIUS * CELL_STEP;
-      const len = cells.length;
-
-      for (let i = 0; i < len; i++) {
-        const cell = cells[i];
-
-        // Skip vignette cells - they shouldn't react to hover repulsion
-        if (cell.isVignette) continue;
-
-        const cellCenterX = cell.col * CELL_STEP + CELL_SIZE / 2;
-        const cellCenterY = cell.row * CELL_STEP + CELL_SIZE / 2;
-
-        // Only allow hovering revealed cells
-        const stream = streams[cell.col];
-        const isRevealed = stream && (stream.y >= cellCenterY);
-        if (!isRevealed) continue;
-
-        const dx = cellCenterX - mouse.x;
-        const dy = cellCenterY - mouse.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-
-        if (dist < mouseRadiusPx && dist > 0.1) {
-          const force = (mouseRadiusPx - dist) / mouseRadiusPx;
-          const pushX = (dx / dist) * force * PUSH_FORCE * 1.5;
-          const pushY = (dy / dist) * force * PUSH_FORCE * 1.5;
-
-          cell.isReturning = false;
-          gsap.to(cell, {
-            offsetX: pushX,
-            offsetY: pushY,
-            duration: 0.35,
-            ease: "power2.out",
-            overwrite: "auto",
-          });
-        } else {
-          // Snap back immediately with elastic ease (no linger delay)
-          if ((cell.offsetX !== 0 || cell.offsetY !== 0) && !cell.isReturning) {
-            cell.isReturning = true;
-            gsap.to(cell, {
-              offsetX: 0,
-              offsetY: 0,
-              duration: 1.5,
-              ease: "elastic.out(1.2, 0.25)",
-              overwrite: "auto",
-              onComplete: () => {
-                cell.isReturning = false;
-              },
+            heroCells.push({
+              col: c,
+              row: r,
+              char: displayChar,
+              brightness: brightness,
+              isGold,
+              color: `rgb(${rCol}, ${gCol}, ${bCol})`
             });
           }
         }
       }
     }
 
-    // 5. Interaction listeners
+    // 3. GSAP Animation Loop (Rendering only)
+    function animate() {
+      if (typeof window === "undefined") return;
+
+      // Gestione timer del glitch
+      glitchTimer++;
+      if (!glitchActive) {
+        if (glitchTimer >= nextGlitchTime) {
+          glitchActive = true;
+          glitchTimer = 0;
+          glitchDuration = 32; // 32 frame in totale (circa 530ms)
+          console.log("Automatic glitch triggered! nextGlitchTime was:", nextGlitchTime);
+        }
+      } else {
+        if (glitchTimer >= glitchDuration) {
+          glitchActive = false;
+          glitchTimer = 0;
+          nextGlitchTime = 120 + Math.random() * 120; // 2-4 secondi di pausa (120-240 frame)
+          console.log("Glitch ended, next automatic glitch in frames:", nextGlitchTime);
+        }
+      }
+
+      // Generazione degli spostamenti orizzontali casuali (glitch line shift)
+      const glitchRowShifts = [];
+      if (glitchActive) {
+        const isTransition = glitchTimer < 10 || glitchTimer >= glitchDuration - 10;
+        const shiftCount = isTransition ? (Math.floor(Math.random() * 4) + 2) : (Math.random() < 0.2 ? 1 : 0);
+        const maxShift = isTransition ? 60 : 6;
+
+        for (let s = 0; s < shiftCount; s++) {
+          glitchRowShifts.push({
+            startRow: Math.floor(Math.random() * rows),
+            rowCount: Math.floor(Math.random() * (isTransition ? 10 : 3)) + 2,
+            amount: (Math.random() - 0.5) * maxShift
+          });
+        }
+      }
+
+      drawGrid();
+
+      // Mostra la scritta solo durante un glitch/flash attivo
+      // Con una transizione iniziale e finale instabile, e un corpo centrale stabile di 200ms (12 frame)
+      let showHero = false;
+      if (glitchActive) {
+        if (glitchTimer < 10 || glitchTimer >= glitchDuration - 10) {
+          // Fase iniziale (intro) e finale (outro) di 10 frame (~160ms): forte sfarfallio
+          showHero = Math.random() < 0.6;
+        } else {
+          // Corpo centrale: visualizzazione stabile della scritta (12 frame, ~200ms)
+          showHero = true;
+        }
+      }
+
+      if (showHero) {
+        // DISEGNA IL TESTO (heroCells)
+        ctx.font = `bold ${CELL_SIZE * 1.35}px "Courier New", Courier, monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        const heroLen = heroCells.length;
+        for (let i = 0; i < heroLen; i++) {
+          const cell = heroCells[i];
+          let char = cell.char;
+          if (char === " ") continue;
+
+          let drawX = cell.col * CELL_STEP + CELL_SIZE / 2;
+          const drawY = cell.row * CELL_STEP + CELL_SIZE / 2;
+
+          // Applica lo spostamento orizzontale a linee
+          if (glitchActive) {
+            const shift = glitchRowShifts.find((s) => cell.row >= s.startRow && cell.row < s.startRow + s.rowCount);
+            if (shift) {
+              drawX += shift.amount;
+            }
+          }
+
+          // Jitter casuale su pixel singoli
+          if (Math.random() < 0.02) {
+            drawX += (Math.random() - 0.5) * 10;
+          }
+
+          // Scrambling di caratteri casuali per effetto digitale
+          if (Math.random() < 0.08) {
+            const scramblePool = ".:+*#%@0369XYZ";
+            char = scramblePool[Math.floor(Math.random() * scramblePool.length)];
+          }
+
+          let color = cell.color;
+          if (cell.isGold) {
+            // Slogan giallo con forte bagliore neon giallo
+            ctx.fillStyle = "rgb(231, 217, 58)";
+            ctx.shadowColor = "rgba(231, 217, 58, 0.95)";
+            ctx.shadowBlur = 15;
+            ctx.fillText(char, drawX, drawY);
+            ctx.shadowBlur = 0; // Ripristina immediatamente
+          } else {
+            // Slogan blu con bagliore neon blu
+            ctx.fillStyle = color;
+            ctx.shadowColor = "rgba(81, 95, 254, 0.95)";
+            ctx.shadowBlur = 10;
+            ctx.fillText(char, drawX, drawY);
+            ctx.shadowBlur = 0;
+          }
+        }
+
+        // Barre orizzontali di scansione di distorsione cromatiche temporanee
+        if (Math.random() < 0.3) {
+          ctx.fillStyle = Math.random() < 0.5 ? "rgba(81, 95, 254, 0.25)" : "rgba(255, 215, 0, 0.3)";
+          const barY = Math.random() * window.innerHeight;
+          const barH = 4 + Math.random() * 20;
+          ctx.fillRect(0, barY, window.innerWidth, barH);
+        }
+      } else {
+        // DISEGNA LOGO E PARTICELLE (Comportamento Standard)
+        const len = cells.length;
+
+        // Generazione di glitch leggeri/subtle e continui sul logo (anche senza glitchActive)
+        const subtleRowShifts = [];
+        const hasSubtleGlitch = !glitchActive && Math.random() < 0.02; // 2% di probabilità per ogni frame
+        if (hasSubtleGlitch) {
+          const shiftCount = Math.floor(Math.random() * 2) + 1;
+          for (let s = 0; s < shiftCount; s++) {
+            subtleRowShifts.push({
+              startRow: Math.floor(Math.random() * rows),
+              rowCount: Math.floor(Math.random() * 3) + 1, // 1-3 righe
+              amount: (Math.random() - 0.5) * 4 // max 2px di scostamento
+            });
+          }
+        }
+
+        // Update offsets first for all cells
+        for (let i = 0; i < len; i++) {
+          const cell = cells[i];
+
+          // Hover history
+          if (!cell.history) cell.history = [];
+          cell.history.push({ x: cell.offsetX, y: cell.offsetY });
+          if (cell.history.length > 5) {
+            cell.history.shift();
+          }
+        }
+
+        // Draw and update background ambient particles
+        ctx.font = `bold ${CELL_SIZE * 1.0}px "Courier New", Courier, monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        const pushRadius = PUSH_RADIUS * CELL_STEP;
+
+        for (let i = 0; i < ambientParticles.length; i++) {
+          const p = ambientParticles[i];
+
+          // Snapped coordinates for grid rendering
+          const col = Math.round(p.x / CELL_STEP);
+          const row = Math.round(p.y / CELL_STEP);
+          const cellY = row * CELL_STEP + CELL_SIZE / 2;
+          let cellX = col * CELL_STEP + CELL_SIZE / 2;
+
+          if (glitchActive) {
+            const shift = glitchRowShifts.find((s) => row >= s.startRow && row < s.startRow + s.rowCount);
+            if (shift) {
+              cellX += shift.amount;
+            }
+          } else if (hasSubtleGlitch) {
+            const shift = subtleRowShifts.find((s) => row >= s.startRow && row < s.startRow + s.rowCount);
+            if (shift) {
+              cellX += shift.amount;
+            }
+          }
+
+          // Reveal logic linked to Matrix rain sweep
+          const stream = streams[col];
+          const isRevealed = stream && (stream.y >= cellY);
+
+          if (isRevealed) {
+            // Physics push from mouse
+            if (mouse.active && mouse.x !== null && mouse.y !== null) {
+              const dx = p.x - mouse.x;
+              const dy = p.y - mouse.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+
+              if (dist < pushRadius && dist > 0.1) {
+                const force = (pushRadius - dist) / pushRadius;
+                p.vx += (dx / dist) * force * 1.5;
+                p.vy += (dy / dist) * force * 1.5;
+              }
+            }
+
+            // Apply physics updates
+            p.x += p.vx;
+            p.y += p.vy;
+
+            // Apply friction/drag to slow down mouse repulsion
+            p.vx *= 0.94;
+            p.vy *= 0.94;
+
+            // Maintain gentle drift speed
+            const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+            if (speed < 0.2) {
+              p.vx += p.dx * 0.05;
+              p.vy += p.dy * 0.05;
+            }
+
+            // Screen wrapping
+            if (p.x < 0) p.x = window.innerWidth;
+            if (p.x > window.innerWidth) p.x = 0;
+            if (p.y < 0) p.y = window.innerHeight;
+            if (p.y > window.innerHeight) p.y = 0;
+
+            // Rendering
+            ctx.fillStyle = p.color;
+            ctx.fillText(p.char, cellX, cellY);
+          }
+        }
+
+        // PASS 1: Draw Matrix Rain streams across the entire screen (bold, 1.2x size)
+        ctx.font = `bold ${CELL_SIZE * 1.2}px "Courier New", Courier, monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        const rainPool = ".:+*#%@0369";
+        for (let c = 0; c < cols; c++) {
+          const stream = streams[c];
+          if (!stream) continue;
+
+          const headRow = Math.floor(stream.y / CELL_STEP);
+          if (headRow < -15) continue; // Not visible yet
+
+          const trailLength = 15;
+          for (let r = headRow - trailLength; r <= headRow; r++) {
+            if (r < 0 || r >= rows) continue;
+
+            let drawX = c * CELL_STEP + CELL_SIZE / 2;
+            const drawY = r * CELL_STEP + CELL_SIZE / 2;
+
+            if (glitchActive) {
+              const shift = glitchRowShifts.find((s) => r >= s.startRow && r < s.startRow + s.rowCount);
+              if (shift) {
+                drawX += shift.amount;
+              }
+            } else if (hasSubtleGlitch) {
+              const shift = subtleRowShifts.find((s) => r >= s.startRow && r < s.startRow + s.rowCount);
+              if (shift) {
+                drawX += shift.amount;
+              }
+            }
+
+            // Rapidly flickering character for the matrix code look
+            const charIdx = Math.floor((c * 31 + r * 17 + Date.now() / 80) % rainPool.length);
+            const displayChar = rainPool[charIdx];
+
+            const age = headRow - r;
+            if (age === 0) {
+              // Head: glowing bright white
+              ctx.fillStyle = "rgba(243, 240, 235, 0.95)";
+            } else {
+              // Tail: fading neon blue
+              const opacity = Math.max(0, 1 - age / trailLength) * 0.8;
+              ctx.fillStyle = `rgba(81, 95, 254, ${opacity})`;
+            }
+
+            ctx.fillText(displayChar, drawX, drawY);
+          }
+        }
+
+        // PASS 2: Draw Large Logo Characters (revealed as rain passes, bold, 1.2x size)
+        ctx.font = `bold ${CELL_SIZE * 1.2}px "Courier New", Courier, monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        for (let i = 0; i < len; i++) {
+          const cell = cells[i];
+          if (cell.isLit && !cell.isParticle) {
+            const cellY = cell.row * CELL_STEP + CELL_SIZE / 2;
+
+            // Check if the rain sweep has reached this cell's row
+            const stream = streams[cell.col];
+            const isRevealed = stream && (stream.y >= cellY);
+
+            if (isRevealed) {
+              // Interpolate color from glowing white/blue to target color as the head recedes
+              const dist = stream.y - cellY;
+              let color;
+              if (cell.isVignette) {
+                color = `rgba(81, 95, 254, ${cell.vignetteOpacity})`;
+                if (dist < 150) {
+                  const t = dist / 150; // 0 to 1
+                  const r = Math.round(255 + (0 - 255) * t);
+                  const g = Math.round(255 + (85 - 255) * t);
+                  const b = Math.round(255 + (255 - 255) * t);
+                  const a = 1.0 + (cell.vignetteOpacity - 1.0) * t;
+                  color = `rgba(${r}, ${g}, ${b}, ${a})`;
+                }
+              } else {
+                color = CHAR_COLOR;
+                if (dist < 150) {
+                  const t = dist / 150; // 0 to 1
+                  const r = Math.round(255 + (218 - 255) * t);
+                  const g = Math.round(255 + (255 - 255) * t);
+                  const b = Math.round(255 + (0 - 255) * t);
+                  color = `rgb(${r}, ${g}, ${b})`;
+                }
+              }
+
+              // Check mouse proximity for hover glitch effect
+              let isHovered = false;
+              let hoverForce = 0;
+              if (mouse.active && mouse.x !== null && mouse.y !== null && !cell.isVignette) {
+                const cellCenterX = cell.col * CELL_STEP + CELL_SIZE / 2;
+                const cellCenterY = cellY;
+                const dx = cellCenterX - mouse.x;
+                const dy = cellCenterY - mouse.y;
+                const distMouse = Math.sqrt(dx * dx + dy * dy);
+                const mouseRadiusPx = PUSH_RADIUS * CELL_STEP;
+                if (distMouse < mouseRadiusPx && distMouse > 0.1) {
+                  isHovered = true;
+                  hoverForce = (mouseRadiusPx - distMouse) / mouseRadiusPx;
+                }
+              }
+
+              if (isHovered) {
+                // High-frequency jitter
+                cell.offsetX = (Math.random() - 0.5) * 12 * hoverForce;
+                cell.offsetY = (Math.random() - 0.5) * 12 * hoverForce;
+                cell.isHoveredGlitch = true;
+              } else if (cell.isHoveredGlitch) {
+                // Snappy decay back to 0
+                cell.offsetX *= 0.75;
+                cell.offsetY *= 0.75;
+                if (Math.abs(cell.offsetX) < 0.05 && Math.abs(cell.offsetY) < 0.05) {
+                  cell.offsetX = 0;
+                  cell.offsetY = 0;
+                  cell.isHoveredGlitch = false;
+                }
+              }
+
+              // Increment frame counter
+              cell.tick++;
+
+              const isMoving =
+                cell.offsetX !== 0 ||
+                cell.offsetY !== 0 ||
+                cell.history.some((h) => h.x !== 0 || h.y !== 0);
+
+              // Scramble ultra-fast (every 1 frame) during hover/repulsion or landing, otherwise scramble fast (every 2-6 frames)
+              const currentInterval = cell.isVignette ? cell.interval : (isHovered || isMoving || dist < 150) ? 1 : cell.interval;
+
+              if (!cell.isVignette && cell.tick >= currentInterval) {
+                cell.tick = 0;
+                if (cell.brightness < 0.4) {
+                  const lightPool = ".:+";
+                  cell.char = lightPool[Math.floor(Math.random() * lightPool.length)];
+                } else if (cell.brightness < 0.75) {
+                  const medPool = "*#%";
+                  cell.char = medPool[Math.floor(Math.random() * medPool.length)];
+                } else {
+                  const darkPool = "@0369";
+                  cell.char = darkPool[Math.floor(Math.random() * darkPool.length)];
+                }
+              }
+
+              let displayChar = cell.char;
+              const isScrambled = !cell.isVignette && (isHovered || (glitchActive && Math.random() < 0.08) || (!glitchActive && Math.random() < 0.0008));
+              if (isScrambled) {
+                const noiseChars = ".:+*#%@0369XYZ$&!?#";
+                displayChar = noiseChars[Math.floor(Math.random() * noiseChars.length)];
+              }
+
+              // Draw hover trail
+              if (isMoving) {
+                const histLen = cell.history.length;
+                for (let h = 0; h < histLen - 1; h++) {
+                  const pos = cell.history[h];
+                  if (pos.x === 0 && pos.y === 0) continue;
+                  const opacity = ((h + 1) / histLen) * 0.35 * (cell.isVignette ? cell.vignetteOpacity * 2 : 1.0);
+                  ctx.fillStyle = `rgba(81, 95, 254, ${opacity})`;
+                  let trailX = cell.col * CELL_STEP + CELL_SIZE / 2 + pos.x;
+                  const trailY = cellY + pos.y;
+                  if (glitchActive) {
+                    const shift = glitchRowShifts.find((s) => cell.row >= s.startRow && cell.row < s.startRow + s.rowCount);
+                    if (shift) {
+                      trailX += shift.amount;
+                    }
+                  } else if (hasSubtleGlitch) {
+                    const shift = subtleRowShifts.find((s) => cell.row >= s.startRow && cell.row < s.startRow + s.rowCount);
+                    if (shift) {
+                      trailX += shift.amount;
+                    }
+                  }
+                  ctx.fillText(displayChar, trailX, trailY);
+                }
+              }
+
+              // Draw current logo character
+              let drawX = cell.col * CELL_STEP + CELL_SIZE / 2 + cell.offsetX;
+              const drawY = cellY + cell.offsetY;
+
+              if (glitchActive) {
+                const shift = glitchRowShifts.find((s) => cell.row >= s.startRow && cell.row < s.startRow + s.rowCount);
+                if (shift) {
+                  drawX += shift.amount;
+                }
+              } else if (hasSubtleGlitch) {
+                const shift = subtleRowShifts.find((s) => cell.row >= s.startRow && cell.row < s.startRow + s.rowCount);
+                if (shift) {
+                  drawX += shift.amount;
+                }
+              }
+
+              const isSubtleChrom = !glitchActive && hasSubtleGlitch && Math.random() < 0.12;
+              const isHoveredChrom = isHovered && Math.random() < 0.35;
+
+              if (glitchActive && Math.random() < 0.15) {
+                ctx.fillStyle = "rgba(255, 0, 100, 0.85)";
+                ctx.fillText(displayChar, drawX - 3, drawY);
+                ctx.fillStyle = "rgba(0, 255, 255, 0.85)";
+                ctx.fillText(displayChar, drawX + 3, drawY);
+              } else if (isHoveredChrom) {
+                ctx.fillStyle = "rgba(255, 0, 100, 0.9)";
+                ctx.fillText(displayChar, drawX - (2 * hoverForce), drawY);
+                ctx.fillStyle = "rgba(0, 255, 255, 0.9)";
+                ctx.fillText(displayChar, drawX + (2 * hoverForce), drawY);
+                ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+                ctx.fillText(displayChar, drawX, drawY);
+              } else if (isSubtleChrom) {
+                ctx.fillStyle = "rgba(255, 0, 100, 0.75)";
+                ctx.fillText(displayChar, drawX - 1.5, drawY);
+                ctx.fillStyle = "rgba(0, 255, 255, 0.75)";
+                ctx.fillText(displayChar, drawX + 1.5, drawY);
+              } else {
+                ctx.fillStyle = color;
+                ctx.fillText(displayChar, drawX, drawY);
+              }
+            }
+          }
+        }
+
+        // PASS 3: Draw Small Logo Particles (revealed as rain passes, bold, 0.9x size)
+        ctx.font = `bold ${CELL_SIZE * 0.9}px "Courier New", Courier, monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+
+        for (let i = 0; i < len; i++) {
+          const cell = cells[i];
+          if (cell.isLit && cell.isParticle) {
+            const cellY = cell.row * CELL_STEP + CELL_SIZE / 2;
+
+            const stream = streams[cell.col];
+            const isRevealed = stream && (stream.y >= cellY);
+
+            if (isRevealed) {
+              // Glow interpolation for particle reveal
+              const dist = stream.y - cellY;
+              let color = "rgba(81, 95, 254, 0.75)";
+              if (dist < 150) {
+                const t = dist / 150;
+                const r = Math.round(255 + (0 - 255) * t);
+                const g = Math.round(255 + (85 - 255) * t);
+                const b = Math.round(255 + (255 - 255) * t);
+                const a = 1.0 + (0.75 - 1.0) * t;
+                color = `rgba(${r}, ${g}, ${b}, ${a})`;
+              }
+
+              // Check mouse proximity for hover glitch effect on particles
+              let isHovered = false;
+              let hoverForce = 0;
+              if (mouse.active && mouse.x !== null && mouse.y !== null) {
+                const cellCenterX = cell.col * CELL_STEP + CELL_SIZE / 2;
+                const cellCenterY = cellY;
+                const dx = cellCenterX - mouse.x;
+                const dy = cellCenterY - mouse.y;
+                const distMouse = Math.sqrt(dx * dx + dy * dy);
+                const mouseRadiusPx = PUSH_RADIUS * CELL_STEP;
+                if (distMouse < mouseRadiusPx && distMouse > 0.1) {
+                  isHovered = true;
+                  hoverForce = (mouseRadiusPx - distMouse) / mouseRadiusPx;
+                }
+              }
+
+              if (isHovered) {
+                // High-frequency jitter
+                cell.offsetX = (Math.random() - 0.5) * 8 * hoverForce;
+                cell.offsetY = (Math.random() - 0.5) * 8 * hoverForce;
+                cell.isHoveredGlitch = true;
+              } else if (cell.isHoveredGlitch) {
+                // Snappy decay back to 0
+                cell.offsetX *= 0.75;
+                cell.offsetY *= 0.75;
+                if (Math.abs(cell.offsetX) < 0.05 && Math.abs(cell.offsetY) < 0.05) {
+                  cell.offsetX = 0;
+                  cell.offsetY = 0;
+                  cell.isHoveredGlitch = false;
+                }
+              }
+
+              // Increment frame counter
+              cell.tick++;
+
+              const isMoving =
+                cell.offsetX !== 0 ||
+                cell.offsetY !== 0 ||
+                cell.history.some((h) => h.x !== 0 || h.y !== 0);
+
+              // Scramble ultra-fast (every 1 frame) during hover/repulsion or landing, otherwise scramble fast (every 2-6 frames)
+              const currentInterval = (isHovered || isMoving || dist < 150) ? 1 : cell.interval;
+
+              if (cell.tick >= currentInterval) {
+                cell.tick = 0;
+                if (cell.brightness < 0.4) {
+                  const lightPool = ".:+";
+                  cell.char = lightPool[Math.floor(Math.random() * lightPool.length)];
+                } else if (cell.brightness < 0.75) {
+                  const medPool = "*#%";
+                  cell.char = medPool[Math.floor(Math.random() * medPool.length)];
+                } else {
+                  const darkPool = "@0369";
+                  cell.char = darkPool[Math.floor(Math.random() * darkPool.length)];
+                }
+              }
+
+              let displayChar = cell.char;
+              const isScrambled = isHovered || (glitchActive && Math.random() < 0.08) || (!glitchActive && Math.random() < 0.003);
+              if (isScrambled) {
+                const noiseChars = ".:+*#%@0369XYZ";
+                displayChar = noiseChars[Math.floor(Math.random() * noiseChars.length)];
+              }
+
+              // Draw hover trail
+              if (isMoving) {
+                const histLen = cell.history.length;
+                for (let h = 0; h < histLen - 1; h++) {
+                  const pos = cell.history[h];
+                  if (pos.x === 0 && pos.y === 0) continue;
+                  const opacity = ((h + 1) / histLen) * 0.35;
+                  ctx.fillStyle = `rgba(81, 95, 254, ${opacity * 0.7})`;
+                  let trailX = cell.col * CELL_STEP + CELL_SIZE / 2 + pos.x;
+                  const drawY = cellY + pos.y;
+                  if (glitchActive) {
+                    const shift = glitchRowShifts.find((s) => cell.row >= s.startRow && cell.row < s.startRow + s.rowCount);
+                    if (shift) {
+                      trailX += shift.amount;
+                    }
+                  } else if (hasSubtleGlitch) {
+                    const shift = subtleRowShifts.find((s) => cell.row >= s.startRow && cell.row < s.startRow + s.rowCount);
+                    if (shift) {
+                      trailX += shift.amount;
+                    }
+                  }
+                  ctx.fillText(displayChar, trailX, drawY);
+                }
+              }
+
+              // Draw current particle character
+              let drawX = cell.col * CELL_STEP + CELL_SIZE / 2 + cell.offsetX;
+              const drawY = cellY + cell.offsetY;
+
+              if (glitchActive) {
+                const shift = glitchRowShifts.find((s) => cell.row >= s.startRow && cell.row < s.startRow + s.rowCount);
+                if (shift) {
+                  drawX += shift.amount;
+                }
+              } else if (hasSubtleGlitch) {
+                const shift = subtleRowShifts.find((s) => cell.row >= s.startRow && cell.row < s.startRow + s.rowCount);
+                if (shift) {
+                  drawX += shift.amount;
+                }
+              }
+
+              const isSubtleChrom = !glitchActive && hasSubtleGlitch && Math.random() < 0.12;
+              const isHoveredChrom = isHovered && Math.random() < 0.35;
+
+              if (glitchActive && Math.random() < 0.15) {
+                ctx.fillStyle = "rgba(255, 0, 100, 0.85)";
+                ctx.fillText(displayChar, drawX - 3, drawY);
+                ctx.fillStyle = "rgba(0, 255, 255, 0.85)";
+                ctx.fillText(displayChar, drawX + 3, drawY);
+              } else if (isHoveredChrom) {
+                ctx.fillStyle = "rgba(255, 0, 100, 0.9)";
+                ctx.fillText(displayChar, drawX - (2 * hoverForce), drawY);
+                ctx.fillStyle = "rgba(0, 255, 255, 0.9)";
+                ctx.fillText(displayChar, drawX + (2 * hoverForce), drawY);
+                ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+                ctx.fillText(displayChar, drawX, drawY);
+              } else if (isSubtleChrom) {
+                ctx.fillStyle = "rgba(255, 0, 100, 0.75)";
+                ctx.fillText(displayChar, drawX - 1.5, drawY);
+                ctx.fillStyle = "rgba(0, 255, 255, 0.75)";
+                ctx.fillText(displayChar, drawX + 1.5, drawY);
+              } else {
+                ctx.fillStyle = color;
+                ctx.fillText(displayChar, drawX, drawY);
+              }
+            }
+          }
+        }
+
+        // Dynamic ambient glitches in background
+        const numGlitches = Math.floor(cols * rows * 0.0003);
+        ctx.fillStyle = "rgba(255, 255, 255, 0.12)";
+        const noisePool = ".:+*#%@0369";
+
+        for (let g = 0; g < numGlitches; g++) {
+          const col = Math.floor(Math.random() * cols);
+          const row = Math.floor(Math.random() * rows);
+          const displayChar = noisePool[Math.floor(Math.random() * noisePool.length)];
+
+          let drawX = col * CELL_STEP + CELL_SIZE / 2;
+          const drawY = row * CELL_STEP + CELL_SIZE / 2;
+
+          if (glitchActive) {
+            const shift = glitchRowShifts.find((s) => row >= s.startRow && row < s.startRow + s.rowCount);
+            if (shift) {
+              drawX += shift.amount;
+            }
+          }
+
+          ctx.fillText(displayChar, drawX, drawY);
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(animate);
+    }
+
+    // 4. Interaction listeners
     function handleMove(clientX, clientY) {
       const rect = canvas.getBoundingClientRect();
       const localX = clientX - rect.left;
@@ -726,7 +1204,6 @@ export default function Home() {
         mouse.x = localX;
         mouse.y = localY;
         mouse.active = true;
-        updateTweens();
       } else {
         handleLeave();
       }
@@ -737,22 +1214,6 @@ export default function Home() {
       mouse.active = false;
       mouse.x = null;
       mouse.y = null;
-
-      // Elastic snap back for ALL cells immediately (no linger) when leaving the screen
-      const len = cells.length;
-      for (let i = 0; i < len; i++) {
-        const cell = cells[i];
-        if (cell.isVignette) continue; // skip vignette cells
-        if (cell.offsetX !== 0 || cell.offsetY !== 0) {
-          gsap.to(cell, {
-            offsetX: 0,
-            offsetY: 0,
-            duration: 1.5,
-            ease: "elastic.out(1.2, 0.25)",
-            overwrite: "auto",
-          });
-        }
-      }
     }
 
     // Bindings (Global window listeners for mouse/touch)
@@ -766,11 +1227,22 @@ export default function Home() {
     };
     const onTouchEnd = () => handleLeave();
 
+    // Glitch manual trigger on keydown 'g'
+    const onKeyDown = (e) => {
+      if (e.key === "g" || e.key === "G") {
+        glitchActive = true;
+        glitchTimer = 0;
+        glitchDuration = 32; // 32 frame in totale (circa 530ms)
+        console.log("'g' key glitch triggered manually!");
+      }
+    };
+
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseleave", onMouseLeave);
     window.addEventListener("touchstart", onTouchStart, { passive: true });
     window.addEventListener("touchmove", onTouchMove, { passive: true });
     window.addEventListener("touchend", onTouchEnd);
+    window.addEventListener("keydown", onKeyDown);
 
     // Global resize listener
     let resizeTimeout;
@@ -779,6 +1251,7 @@ export default function Home() {
       resizeTimeout = setTimeout(() => {
         setupCanvas();
         sampleLogoIntoCells();
+        sampleTextIntoCells();
       }, 150);
     };
     window.addEventListener("resize", onResize);
@@ -816,14 +1289,21 @@ export default function Home() {
     function initAll() {
       setupCanvas();
       sampleLogoIntoCells();
+      sampleTextIntoCells();
       triggerMatrixIntro();
       animate();
     }
 
+    const checkAndInit = () => {
+      if (logoImg.complete) {
+        initAll();
+      }
+    };
+
     if (logoImg.complete) {
       initAll();
     } else {
-      logoImg.onload = initAll;
+      logoImg.onload = checkAndInit;
     }
 
     // Cleanup
@@ -835,6 +1315,7 @@ export default function Home() {
       window.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("resize", onResize);
+      window.removeEventListener("keydown", onKeyDown);
     };
   }, []);
 
@@ -855,6 +1336,7 @@ export default function Home() {
       <div className="crt-flicker"></div>
 
       <div className="screen">
+
 
         <main className="canvas-container">
           <canvas ref={canvasRef} id="grid"></canvas>
