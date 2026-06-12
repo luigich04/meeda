@@ -439,66 +439,48 @@ export default function Home() {
 
       const isMobile = window.innerWidth < 768;
 
+      // Draw all text in white
+      sampleCtx.fillStyle = "#ffffff";
+
       if (isMobile) {
         // Linea 1: "Where brands"
         // Linea 2: "turn gold."
         let fontSize = 10;
-        sampleCtx.font = `bold ${fontSize}px "Courier New", Courier, monospace`;
+        sampleCtx.font = `500 ${fontSize}px "Clash Grotesk", sans-serif`;
         let textWidth = sampleCtx.measureText("Where brands").width;
         fontSize = Math.floor((cols * 0.88) / textWidth * fontSize);
         fontSize = Math.min(fontSize, Math.floor(rows * 0.20));
         fontSize = Math.max(fontSize, 6);
 
-        sampleCtx.font = `bold ${fontSize}px "Courier New", Courier, monospace`;
+        sampleCtx.font = `500 ${fontSize}px "Clash Grotesk", sans-serif`;
         sampleCtx.textAlign = "center";
         sampleCtx.textBaseline = "middle";
 
         const centerY = rows / 2;
         const lineSpacing = fontSize * 1.25;
 
-        // Scrivi Linea 1 in blu neon (#515ffe)
-        sampleCtx.fillStyle = "#515ffe";
+        // Scrivi Linea 1
         sampleCtx.fillText("Where brands", cols / 2, centerY - lineSpacing / 2);
 
-        // Scrivi Linea 2 (turn in blu e gold. in giallo)
-        const turnText = "turn ";
-        const goldText = "gold.";
-        const totalText = "turn gold.";
-        const totalWidth = sampleCtx.measureText(totalText).width;
-        const startX = (cols - totalWidth) / 2;
-
-        sampleCtx.textAlign = "left";
-        sampleCtx.fillStyle = "#515ffe";
-        sampleCtx.fillText(turnText, startX, centerY + lineSpacing / 2);
-
-        const turnWidth = sampleCtx.measureText(turnText).width;
-        sampleCtx.fillStyle = "#e7d93a";
-        sampleCtx.fillText(goldText, startX + turnWidth, centerY + lineSpacing / 2);
+        // Scrivi Linea 2
+        sampleCtx.fillText("turn gold.", cols / 2, centerY + lineSpacing / 2);
       } else {
         // Riga singola: "Where brands turn gold."
         let fontSize = 10;
-        sampleCtx.font = `bold ${fontSize}px "Courier New", Courier, monospace`;
+        sampleCtx.font = `500 ${fontSize}px "Clash Grotesk", sans-serif`;
         let textWidth = sampleCtx.measureText("Where brands turn gold.").width;
         fontSize = Math.floor((cols * 0.86) / textWidth * fontSize);
         fontSize = Math.min(fontSize, Math.floor(rows * 0.30));
         fontSize = Math.max(fontSize, 7);
 
-        sampleCtx.font = `bold ${fontSize}px "Courier New", Courier, monospace`;
-        sampleCtx.textAlign = "left";
+        sampleCtx.font = `500 ${fontSize}px "Clash Grotesk", sans-serif`;
+        sampleCtx.textAlign = "center";
         sampleCtx.textBaseline = "middle";
 
-        const firstPart = "Where brands turn ";
-        const secondPart = "gold.";
-        const totalWidth = sampleCtx.measureText(firstPart + secondPart).width;
-        const startX = (cols - totalWidth) / 2;
         const centerY = rows / 2;
 
-        sampleCtx.fillStyle = "#515ffe";
-        sampleCtx.fillText(firstPart, startX, centerY);
-
-        const firstWidth = sampleCtx.measureText(firstPart).width;
-        sampleCtx.fillStyle = "#e7d93a";
-        sampleCtx.fillText(secondPart, startX + firstWidth, centerY);
+        // Scrivi la riga intera centrata
+        sampleCtx.fillText("Where brands turn gold.", cols / 2, centerY);
       }
 
       const imgData = sampleCtx.getImageData(0, 0, cols, rows);
@@ -515,42 +497,16 @@ export default function Home() {
           const brightness = (red * 0.299 + green * 0.587 + blue * 0.114) / 255;
 
           if (brightness > 0.05) {
-            const isGold = red > 150 && green > 150 && blue < 100;
-
             let displayChar = " ";
-            if (isGold) {
-              if (brightness < 0.25) {
-                const goldPool = ".:|";
-                displayChar = goldPool[Math.floor(Math.random() * goldPool.length)];
-              } else if (brightness < 0.55) {
-                const goldPool = "I1T|";
-                displayChar = goldPool[Math.floor(Math.random() * goldPool.length)];
-              } else {
-                const goldPool = "HM#[]";
-                displayChar = goldPool[Math.floor(Math.random() * goldPool.length)];
-              }
+            if (brightness < 0.3) {
+              const charPool = ".:+";
+              displayChar = charPool[Math.floor(Math.random() * charPool.length)];
+            } else if (brightness < 0.6) {
+              const charPool = "I|!1";
+              displayChar = charPool[Math.floor(Math.random() * charPool.length)];
             } else {
-              if (brightness < 0.3) {
-                const techPool = ".:+";
-                displayChar = techPool[Math.floor(Math.random() * techPool.length)];
-              } else if (brightness < 0.6) {
-                const techPool = "I|!1";
-                displayChar = techPool[Math.floor(Math.random() * techPool.length)];
-              } else {
-                const techPool = "[]{}#";
-                displayChar = techPool[Math.floor(Math.random() * techPool.length)];
-              }
-            }
-
-            let rCol, gCol, bCol;
-            if (isGold) {
-              rCol = 231;
-              gCol = 217;
-              bCol = 58;
-            } else {
-              rCol = 81;
-              gCol = 95;
-              bCol = 254;
+              const charPool = "[]{}#";
+              displayChar = charPool[Math.floor(Math.random() * charPool.length)];
             }
 
             heroCells.push({
@@ -558,8 +514,7 @@ export default function Home() {
               row: r,
               char: displayChar,
               brightness: brightness,
-              isGold,
-              color: `rgb(${rCol}, ${gCol}, ${bCol})`
+              color: "rgb(255, 255, 255)"
             });
           }
         }
@@ -577,7 +532,12 @@ export default function Home() {
           glitchActive = true;
           glitchTimer = 0;
           glitchDuration = 32; // 32 frame in totale (circa 530ms)
-          console.log("Automatic glitch triggered! nextGlitchTime was:", nextGlitchTime);
+          const isYellow = Math.random() < 0.5;
+          const targetColor = isYellow ? "rgb(231, 217, 58)" : "rgb(255, 255, 255)";
+          heroCells.forEach((cell) => {
+            cell.color = targetColor;
+          });
+          console.log(`Automatic glitch triggered! nextGlitchTime was: ${nextGlitchTime}, Color: ${isYellow ? "yellow" : "white"}`);
         }
       } else {
         if (glitchTimer >= glitchDuration) {
@@ -621,7 +581,7 @@ export default function Home() {
 
       if (showHero) {
         // DISEGNA IL TESTO (heroCells)
-        ctx.font = `bold ${CELL_SIZE * 1.35}px "Courier New", Courier, monospace`;
+        ctx.font = `500 ${CELL_SIZE * 1.35}px "Clash Grotesk", sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
 
@@ -653,22 +613,18 @@ export default function Home() {
             char = scramblePool[Math.floor(Math.random() * scramblePool.length)];
           }
 
-          let color = cell.color;
-          if (cell.isGold) {
-            // Slogan giallo con forte bagliore neon giallo
-            ctx.fillStyle = "rgb(231, 217, 58)";
+          // Disegna il carattere in base al colore assegnato (giallo o bianco) con il rispettivo glow
+          const isYellow = cell.color === "rgb(231, 217, 58)";
+          ctx.fillStyle = cell.color || "#ffffff";
+          if (isYellow) {
             ctx.shadowColor = "rgba(231, 217, 58, 0.95)";
             ctx.shadowBlur = 15;
-            ctx.fillText(char, drawX, drawY);
-            ctx.shadowBlur = 0; // Ripristina immediatamente
           } else {
-            // Slogan blu con bagliore neon blu
-            ctx.fillStyle = color;
-            ctx.shadowColor = "rgba(81, 95, 254, 0.95)";
+            ctx.shadowColor = "rgba(255, 255, 255, 0.95)";
             ctx.shadowBlur = 10;
-            ctx.fillText(char, drawX, drawY);
-            ctx.shadowBlur = 0;
           }
+          ctx.fillText(char, drawX, drawY);
+          ctx.shadowBlur = 0;
         }
 
         // Barre orizzontali di scansione di distorsione cromatiche temporanee
@@ -1227,13 +1183,18 @@ export default function Home() {
     };
     const onTouchEnd = () => handleLeave();
 
-    // Glitch manual trigger on keydown 'g'
+    // Glitch manual trigger on keydown
     const onKeyDown = (e) => {
-      if (e.key === "g" || e.key === "G") {
+      const key = e.key.toLowerCase();
+      if (key === "g" || key === "d") {
         glitchActive = true;
         glitchTimer = 0;
         glitchDuration = 32; // 32 frame in totale (circa 530ms)
-        console.log("'g' key glitch triggered manually!");
+        const targetColor = key === "g" ? "rgb(231, 217, 58)" : "rgb(255, 255, 255)";
+        heroCells.forEach((cell) => {
+          cell.color = targetColor;
+        });
+        console.log(`'${key}' key glitch triggered manually! Color: ${key === "g" ? "yellow" : "white"}`);
       }
     };
 
